@@ -28,6 +28,7 @@ class Task:
     request: Request
     _default_retry_delay: int = dataclasses.field(repr=False)
 
+
     @property
     def name(self) -> str:
         return self.request.task
@@ -36,7 +37,8 @@ class Task:
         self,
         *,
         state: str,
-        meta: dict[str, Any],
+        meta: dict[str, Any] = None,
+        result: dict[str, Any] = None,
         _finalize: bool = False,
     ) -> None:
         result_backend = self.app.result_backend
@@ -48,7 +50,8 @@ class Task:
             pass
         payload: dict[str, Any] = {
             "status": state,
-            "result": meta,
+            "meta": meta,
+            "result": result,
             "traceback": None,
             "children": [],
             "date_done": None,
@@ -67,6 +70,7 @@ class Task:
             json.dumps(payload).encode(),
             ex=self.app.conf.result_expires,
         )
+
 
     def build_next_task_message(self, result: Any) -> tuple[Message | None, str]:
         if not self.request.chain:
@@ -110,3 +114,4 @@ class Task:
             message=self.request.build_retry_message(countdown=delay),
             delay=delay,
         )
+

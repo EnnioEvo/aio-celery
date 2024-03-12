@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from .utils import first_not_null
@@ -22,7 +22,7 @@ class AnnotatedTask:
     name: str
     queue: str | None
     priority: int | None
-
+    
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if self.bind:
             return self.fn(None, *args, **kwargs)
@@ -37,6 +37,7 @@ class AnnotatedTask:
         countdown: float | None = None,
         priority: int | None = None,
         queue: str | None = None,
+        meta: dict[str, Any] | None = None,
     ) -> AsyncResult:
         return await self.app.send_task(
             self.name,
@@ -50,7 +51,9 @@ class AnnotatedTask:
                 self.app.conf.task_default_priority,
             ),
             queue=first_not_null(queue, self.queue),
+            meta=meta
         )
 
-    async def delay(self, *args: Any, **kwargs: Any) -> AsyncResult:
-        return await self.apply_async(args=args, kwargs=kwargs)
+    async def delay(self, *args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], AsyncResult]:
+        meta = kwargs.pop("meta", {})
+        return await self.apply_async(args=args, kwargs=kwargs, meta=meta)

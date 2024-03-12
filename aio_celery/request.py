@@ -27,6 +27,7 @@ class Request:
     ignore_result: bool
     timelimit: tuple[int | None, int | None]
     chain: list[dict[str, Any]]
+    meta: dict[str, Any] | None
 
     @classmethod
     def from_message(cls: type[Request], message: IncomingMessage) -> Request:
@@ -58,6 +59,7 @@ class Request:
             ignore_result=bool(headers["ignore_result"]),
             timelimit=cast(Tuple[Optional[int], Optional[int]], headers["timelimit"]),
             chain=options["chain"],
+            meta=cast(Optional[dict[str, Any]], headers.get("meta")),
         )
 
     def build_retry_message(

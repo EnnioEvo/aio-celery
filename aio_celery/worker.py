@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
     from .annotated_task import AnnotatedTask
 
+
+
 BANNER = """\
 [config]
 .> app:         {app}
@@ -43,6 +45,8 @@ BANNER = """\
 MAX_AMQP_PREFETCH_COUNT = 65535
 
 logger = logging.getLogger(__name__)
+
+coroutines = {}
 
 
 async def _sleep_if_necessary(task: Task) -> None:
@@ -78,8 +82,15 @@ async def _handle_task_result(
         or task.request.ignore_result
     ):
         return
-    await task.update_state(state="SUCCESS", meta=result, _finalize=True)
+    await task.update_state(state="SUCCESS", result=result, _finalize=True)
 
+
+async def _handle_task_cancel(
+    task: Task,
+    annotated_task: AnnotatedTask,
+    message: IncomingMessage,
+) -> None:
+    await task.update_state(state="CANCELLED", _finalize=True)
 
 async def _handle_task_retry(
     *,
@@ -124,6 +135,8 @@ async def on_message_received(  # noqa: PLR0915
             logger.info("Task %s[%s] received", task_name, task_id)
             CURRENT_ROOT_ID.set(root_id)
             CURRENT_TASK_ID.set(task_id)
+
+
             try:
                 annotated_task = app.get_annotated_task(task_name)
             except KeyError:
@@ -168,6 +181,26 @@ async def on_message_received(  # noqa: PLR0915
                 task.request.args,
                 task.request.kwargs,
             )
+
+            # Check if task is a control task first
+            if task_name == "revoke":
+                # breakpoint()
+                to_be_canceled_task_id =  task.request.kwargs.get("task_id")
+                coro = coroutines.get(to_be_canceled_task_id)
+                try:
+                    coro.cancel()
+                    coro = coroutines.pop(to_be_canceled_task_id, None)
+                except asyncio.CancelledError:
+                    coro = coroutines.pop(to_be_canceled_task_id, None)
+                    logger.info(f"Task {to_be_canceled_task_id} canceled")
+                except Exception as e:
+                    logger.info(f"Task {to_be_canceled_task_id} not found")
+                return
+            elif task_name == "list_tasks":
+                ongoing_task_ids = list(coroutines.keys())
+                await task.update_state(state="SUCCESS", result=ongoing_task_ids, _finalize=True)
+                return
+
             await _sleep_if_necessary(task)
 
             async with semaphore:
@@ -185,9 +218,15 @@ async def on_message_received(  # noqa: PLR0915
                 soft_time_limit = (
                     task.request.timelimit[0] or app.conf.task_soft_time_limit
                 )
-                coro: Awaitable[Any] = annotated_task.fn(*args, **task.request.kwargs)
+                awaitable : Awaitable[Any] = annotated_task.fn(*args, **task.request.kwargs)
+                coro = asyncio.create_task(awaitable)
+
+                coroutines[task.request.id] = coro
+                logger.info(f"Pointer for task {task.request.id} updated, {len(list(coroutines.keys()))} tasks started")
+
                 try:
                     try:
+                        task.update_state(state="PENDING", meta=task.request.meta)
                         if soft_time_limit is None:
                             result = await coro
                         elif sys.version_info >= (3, 11):
@@ -200,7 +239,19 @@ async def on_message_received(  # noqa: PLR0915
                             )
                     except annotated_task.autoretry_for:
                         await task.retry()
+                except asyncio.CancelledError as exc:
+                    await _handle_task_cancel(
+                        task=task,
+                        annotated_task=annotated_task,
+                        message=message,
+                    )
+                    cancelled_task_id = task.request.kwargs.get("task_id")
+                    logger.info(
+                        "Task [%s] cancelled",
+                        cancelled_task_id
+                    )
                 except Retry as exc:
+                    breakpoint()
                     await _handle_task_retry(
                         task=task,
                         annotated_task=annotated_task,
@@ -323,6 +374,7 @@ async def run(args: argparse.Namespace) -> None:
         app.list_registered_task_names(),
         app,
     )
+
 
     async with app.setup():
         semaphore = asyncio.Semaphore(args.concurrency)

@@ -20,17 +20,17 @@ class AsyncResult:
     ) -> None:
         self.id = id
         self._cache = None
-        self.result_backend = app.result_backend
+        self.app = app
 
     def __repr__(self) -> str:
         return f"<{type(self).__name__}: {self.id}>"
 
     async def _get_task_meta(self) -> dict[str, Any]:
-        if self.result_backend is None:
+        if self.app.result_backend is None:
             msg = "No result backend is configured."
             raise RuntimeError(msg)
         if self._cache is None:
-            value = await self.result_backend.get(f"celery-task-meta-{self.id}")
+            value = await self.app.result_backend.get(f"celery-task-meta-{self.id}")
             if value is None:
                 return {"result": None, "status": "PENDING"}
             self._cache = json.loads(value)
@@ -55,3 +55,8 @@ class AsyncResult:
                 raise TimeoutError(msg)
             value = await self._get_task_meta()
         return value["result"]
+
+    async def revoke(self):
+        return await self.app.cancel_task(self.id)
+
+

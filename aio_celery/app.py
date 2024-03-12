@@ -151,6 +151,7 @@ class Celery:
         msg = "@task() takes exactly 1 argument"
         raise TypeError(msg)
 
+
     def _construct_extended_task_registry(self) -> dict[str, AnnotatedTask]:
         registry: dict[str, AnnotatedTask] = {}
         for name, task in _SHARED_APP._tasks_registry.items():  # noqa: SLF001
@@ -178,6 +179,7 @@ class Celery:
         task_id: str | None = None,
         priority: int | None = None,
         queue: str | None = None,
+        meta : dict[str, Any] = None,
     ) -> _AsyncResult:
         if task_id is None:
             task_id = str(uuid.uuid4())
@@ -191,10 +193,12 @@ class Celery:
                 countdown=countdown,
                 parent_id=CURRENT_TASK_ID.get(),
                 root_id=CURRENT_ROOT_ID.get(),
+                meta=meta
             ),
             routing_key=first_not_null(queue, self.conf.task_default_queue),
         )
         return self.AsyncResult(task_id)
+
 
 
 @contextlib.asynccontextmanager
@@ -219,3 +223,11 @@ def shared_task(
     **kwargs: Any,
 ) -> AnnotatedTask | Callable[[Callable[..., Awaitable[Any]]], AnnotatedTask]:
     return _SHARED_APP.task(*args, **kwargs)
+
+@shared_task(name='revoke')
+async def revoke(task_id: str):
+    pass
+
+@shared_task(name='list_tasks')
+async def list_tasks():
+    pass
