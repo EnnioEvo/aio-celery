@@ -37,7 +37,7 @@ class AnnotatedTask:
         countdown: float | None = None,
         priority: int | None = None,
         queue: str | None = None,
-        meta: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
     ) -> AsyncResult:
         return await self.app.send_task(
             self.name,
@@ -51,9 +51,10 @@ class AnnotatedTask:
                 self.app.conf.task_default_priority,
             ),
             queue=first_not_null(queue, self.queue),
-            meta=meta
+            data=data
         )
 
     async def delay(self, *args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], AsyncResult]:
-        meta = kwargs.pop("meta", {})
-        return await self.apply_async(args=args, kwargs=kwargs, meta=meta)
+        data = kwargs.pop("data", {})
+        async with self.app.setup():
+            return await self.apply_async(args=args, kwargs=kwargs, data=data)

@@ -82,7 +82,7 @@ async def _handle_task_result(
         or task.request.ignore_result
     ):
         return
-    await task.update_state(state="SUCCESS", result=result, _finalize=True)
+    await task.update_state(state="SUCCESS", data=task.request.data, result=result, _finalize=True)
 
 
 async def _handle_task_cancel(
@@ -90,7 +90,7 @@ async def _handle_task_cancel(
     annotated_task: AnnotatedTask,
     message: IncomingMessage,
 ) -> None:
-    await task.update_state(state="CANCELLED", _finalize=True)
+    await task.update_state(state="CANCELLED", data=task.request.data,_finalize=True)
 
 async def _handle_task_retry(
     *,
@@ -181,24 +181,33 @@ async def on_message_received(  # noqa: PLR0915
                 task.request.args,
                 task.request.kwargs,
             )
-
             # Check if task is a control task first
             if task_name == "revoke":
-                # breakpoint()
                 to_be_canceled_task_id =  task.request.kwargs.get("task_id")
                 coro = coroutines.get(to_be_canceled_task_id)
                 try:
                     coro.cancel()
                     coro = coroutines.pop(to_be_canceled_task_id, None)
-                except asyncio.CancelledError:
-                    coro = coroutines.pop(to_be_canceled_task_id, None)
-                    logger.info(f"Task {to_be_canceled_task_id} canceled")
+                # except asyncio.CancelledError:
+                #     coro = coroutines.pop(to_be_canceled_task_id, None)
+                #     logger.info(f"Task {to_be_canceled_task_id} cancelled")
                 except Exception as e:
                     logger.info(f"Task {to_be_canceled_task_id} not found")
                 return
+            if task_name == "purge":
+                for coro_id, coro in coroutines.items():
+                    try:
+                        coro.cancel()
+                    # except asyncio.CancelledError:
+                    #     coro = coroutines.pop(to_be_canceled_task_id, None)
+                    #     logger.info(f"Task {coro_id} cancelled")
+                    except Exception as e:
+                        logger.info(f"Task {coro_id} not found")
+                await app.result_backend.flushdb()
+                return
             elif task_name == "list_tasks":
                 ongoing_task_ids = list(coroutines.keys())
-                await task.update_state(state="SUCCESS", result=ongoing_task_ids, _finalize=True)
+                # await task.update_state(state="SUCCESS", result=ongoing_task_ids, _finalize=True)
                 return
 
             await _sleep_if_necessary(task)
@@ -226,7 +235,7 @@ async def on_message_received(  # noqa: PLR0915
 
                 try:
                     try:
-                        task.update_state(state="PENDING", meta=task.request.meta)
+                        await task.update_state(state="PENDING", data=task.request.data)
                         if soft_time_limit is None:
                             result = await coro
                         elif sys.version_info >= (3, 11):

@@ -37,7 +37,7 @@ class Task:
         self,
         *,
         state: str,
-        meta: dict[str, Any] = None,
+        data: dict[str, Any] = None,
         result: dict[str, Any] = None,
         _finalize: bool = False,
     ) -> None:
@@ -50,7 +50,7 @@ class Task:
             pass
         payload: dict[str, Any] = {
             "status": state,
-            "meta": meta,
+            "data": data,
             "result": result,
             "traceback": None,
             "children": [],

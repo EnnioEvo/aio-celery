@@ -20,7 +20,7 @@ def create_task_message(  # noqa: PLR0913
     ignore_result: bool = False,
     countdown: float | None = None,
     reply_to: str = "",
-    meta: dict[str, Any] | None = None,
+    data: dict[str, Any] | None = None,
 ) -> Message:
     args = args or ()
     kwargs = kwargs or {}
@@ -41,7 +41,7 @@ def create_task_message(  # noqa: PLR0913
         "ignore_result": ignore_result,
         "kwargsrepr": repr(kwargs),
         "lang": "py",  # required
-        "meta": meta if meta else {},
+        "data": data if data else {},
         "origin": "unknown_pid@unknown_hostname",
         "parent_id": parent_id,  # required
         "retries": 0,

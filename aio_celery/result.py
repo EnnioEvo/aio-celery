@@ -37,12 +37,21 @@ class AsyncResult:
         return cast(Dict[str, Any], self._cache)
 
     @property
+    async def meta(self) -> Dict[str, Any]:
+        return (await self._get_task_meta())
+
+    @property
     async def result(self) -> Any:
         return (await self._get_task_meta())["result"]
 
     @property
     async def state(self) -> str:
         return str((await self._get_task_meta())["status"])
+
+
+    @property
+    async def data(self) -> str:
+        return (await self._get_task_meta())["data"]
 
     async def get(self, timeout: float | None = None, interval: float = 0.5) -> Any:
         """Wait until task is ready, and return its result."""
@@ -58,5 +67,7 @@ class AsyncResult:
 
     async def revoke(self):
         return await self.app.cancel_task(self.id)
+
+
 
 

@@ -1,4 +1,4 @@
-from .app import Celery, shared_task, _SHARED_APP, revoke, list_tasks
+from .app import Celery, shared_task, _SHARED_APP, revoke, list_tasks, purge
 from .task import Task
 
 __version__ = "0.9.2"

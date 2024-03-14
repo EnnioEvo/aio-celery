@@ -179,7 +179,7 @@ class Celery:
         task_id: str | None = None,
         priority: int | None = None,
         queue: str | None = None,
-        meta : dict[str, Any] = None,
+        data : dict[str, Any] = None,
     ) -> _AsyncResult:
         if task_id is None:
             task_id = str(uuid.uuid4())
@@ -193,7 +193,7 @@ class Celery:
                 countdown=countdown,
                 parent_id=CURRENT_TASK_ID.get(),
                 root_id=CURRENT_ROOT_ID.get(),
-                meta=meta
+                data=data
             ),
             routing_key=first_not_null(queue, self.conf.task_default_queue),
         )
@@ -224,10 +224,22 @@ def shared_task(
 ) -> AnnotatedTask | Callable[[Callable[..., Awaitable[Any]]], AnnotatedTask]:
     return _SHARED_APP.task(*args, **kwargs)
 
-@shared_task(name='revoke')
+@_SHARED_APP.task(name='revoke')
 async def revoke(task_id: str):
-    pass
+    await revoke.delay(task_id)
 
-@shared_task(name='list_tasks')
+@_SHARED_APP.task(name='list_tasks')
 async def list_tasks():
-    pass
+    job = await list_tasks.delay()
+    tasks_list = await job.get()
+    return tasks_list
+
+@_SHARED_APP.task(name='list_tasks')
+async def retrieve_tasks():
+    job = await list_tasks.delay()
+    tasks_list = await job.get()
+    return tasks_list
+
+@_SHARED_APP.task(name='purge')
+async def purge():
+    await purge.delay()
