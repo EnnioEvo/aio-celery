@@ -1,0 +1,60 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
+
+from .utils import first_not_null
+
+if TYPE_CHECKING:
+    from .app import Celery
+    from .result import AsyncResult
+
+
+@dataclass
+class AnnotatedTask:
+    fn: Callable[..., Awaitable[Any]]
+    bind: bool
+    ignore_result: bool | None
+    max_retries: int | None
+    default_retry_delay: int
+    autoretry_for: tuple[type[Exception], ...]
+    app: Celery
+    name: str
+    queue: str | None
+    priority: int | None
+    
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if self.bind:
+            return self.fn(None, *args, **kwargs)
+        return self.fn(*args, **kwargs)
+
+    async def apply_async(  # noqa: PLR0913
+        self,
+        args: tuple[Any, ...] | None = None,
+        kwargs: dict[str, Any] | None = None,
+        *,
+        task_id: str | None = None,
+        countdown: float | None = None,
+        priority: int | None = None,
+        queue: str | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> AsyncResult:
+        return await self.app.send_task(
+            self.name,
+            args=args,
+            kwargs=kwargs,
+            countdown=countdown,
+            task_id=task_id,
+            priority=first_not_null(
+                priority,
+                self.priority,
+                self.app.conf.task_default_priority,
+            ),
+            queue=first_not_null(queue, self.queue),
+            data=data
+        )
+
+    async def delay(self, *args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], AsyncResult]:
+        data = kwargs.pop("data", {})
+        async with self.app.setup():
+            return await self.apply_async(args=args, kwargs=kwargs, data=data)
