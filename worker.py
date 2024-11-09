@@ -268,7 +268,6 @@ async def on_message_received(  # noqa: PLR0915
                     cancelled_task_id = task.request.id
                     logger.info("Task [%s] cancelled", cancelled_task_id)
                 except Retry as exc:
-                    breakpoint()
                     await _handle_task_retry(
                         task=task,
                         annotated_task=annotated_task,
