@@ -407,7 +407,7 @@ async def run(args: argparse.Namespace) -> None:
                     app=app,
                     semaphore=semaphore,
                 ),
-                no_ack=True,
+                # no_ack=True,
             )
         logger.info("Waiting for messages. To exit press CTRL+C")
         await asyncio.Future()

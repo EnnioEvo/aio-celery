@@ -22,7 +22,7 @@ class AnnotatedTask:
     name: str
     queue: str | None
     priority: int | None
-    
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         if self.bind:
             return self.fn(None, *args, **kwargs)
@@ -51,10 +51,12 @@ class AnnotatedTask:
                 self.app.conf.task_default_priority,
             ),
             queue=first_not_null(queue, self.queue),
-            data=data
+            data=data,
         )
 
-    async def delay(self, *args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], AsyncResult]:
+    async def delay(
+        self, *args: Any, **kwargs: Any
+    ) -> tuple[dict[str, Any], AsyncResult]:
         data = kwargs.pop("data", {})
         async with self.app.setup():
             return await self.apply_async(args=args, kwargs=kwargs, data=data)
