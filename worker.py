@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from .annotated_task import AnnotatedTask
 
 
-
 BANNER = """\
 [config]
 .> app:         {app}
@@ -45,6 +44,7 @@ BANNER = """\
 MAX_AMQP_PREFETCH_COUNT = 65535
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 coroutines = {}
 
@@ -82,7 +82,9 @@ async def _handle_task_result(
         or task.request.ignore_result
     ):
         return
-    await task.update_state(state="SUCCESS", data=task.request.data, result=result, _finalize=True)
+    await task.update_state(
+        state="SUCCESS", data=task.request.data, result=result, _finalize=True
+    )
 
 
 async def _handle_task_cancel(
@@ -90,7 +92,8 @@ async def _handle_task_cancel(
     annotated_task: AnnotatedTask,
     message: IncomingMessage,
 ) -> None:
-    await task.update_state(state="CANCELLED", data=task.request.data,_finalize=True)
+    await task.update_state(state="CANCELLED", data=task.request.data, _finalize=True)
+
 
 async def _handle_task_retry(
     *,
@@ -135,7 +138,6 @@ async def on_message_received(  # noqa: PLR0915
             logger.info("Task %s[%s] received", task_name, task_id)
             CURRENT_ROOT_ID.set(root_id)
             CURRENT_TASK_ID.set(task_id)
-
 
             try:
                 annotated_task = app.get_annotated_task(task_name)
@@ -182,8 +184,9 @@ async def on_message_received(  # noqa: PLR0915
                 task.request.kwargs,
             )
             # Check if task is a control task first
+            global coroutines
             if task_name == "revoke":
-                to_be_canceled_task_id =  task.request.kwargs.get("task_id")
+                to_be_canceled_task_id = task.request.kwargs.get("task_id")
                 coro = coroutines.get(to_be_canceled_task_id)
                 try:
                     coro.cancel()
@@ -208,7 +211,9 @@ async def on_message_received(  # noqa: PLR0915
                 return
             elif task_name == "list_tasks":
                 ongoing_task_ids = list(coroutines.keys())
-                await task.update_state(state="SUCCESS", result=ongoing_task_ids, _finalize=True)
+                await task.update_state(
+                    state="SUCCESS", result=ongoing_task_ids, _finalize=True
+                )
                 return
 
             await _sleep_if_necessary(task)
@@ -228,18 +233,22 @@ async def on_message_received(  # noqa: PLR0915
                 soft_time_limit = (
                     task.request.timelimit[0] or app.conf.task_soft_time_limit
                 )
-                awaitable : Awaitable[Any] = annotated_task.fn(*args, **task.request.kwargs)
+                logging.info(f"soft_time_limit is  {soft_time_limit}")
+                awaitable: Awaitable[Any] = annotated_task.fn(
+                    *args, **task.request.kwargs
+                )
                 coro = asyncio.create_task(awaitable)
 
                 coroutines[task.request.id] = coro
-                logger.info(f"Pointer for task {task.request.id} updated, {len(list(coroutines.keys()))} tasks started")
+                logger.info(
+                    f"Pointer for task {task.request.id} updated, {len(list(coroutines.keys()))} tasks started"
+                )
 
                 try:
                     try:
                         await task.update_state(state="PENDING", data=task.request.data)
                         if soft_time_limit is None:
                             result = await coro
-                            breakpoint()
                         elif sys.version_info >= (3, 11):
                             async with asyncio.timeout(soft_time_limit):
                                 result = await coro
@@ -256,11 +265,8 @@ async def on_message_received(  # noqa: PLR0915
                         annotated_task=annotated_task,
                         message=message,
                     )
-                    cancelled_task_id = task.request.kwargs.get("task_id")
-                    logger.info(
-                        "Task [%s] cancelled",
-                        cancelled_task_id
-                    )
+                    cancelled_task_id = task.request.id
+                    logger.info("Task [%s] cancelled", cancelled_task_id)
                 except Retry as exc:
                     breakpoint()
                     await _handle_task_retry(
@@ -386,7 +392,6 @@ async def run(args: argparse.Namespace) -> None:
         app,
     )
 
-
     async with app.setup():
         semaphore = asyncio.Semaphore(args.concurrency)
         prefetch_count = min(
@@ -403,6 +408,7 @@ async def run(args: argparse.Namespace) -> None:
                     app=app,
                     semaphore=semaphore,
                 ),
+                no_ack=True,
             )
         logger.info("Waiting for messages. To exit press CTRL+C")
         await asyncio.Future()
